@@ -1,0 +1,19 @@
+---
+
+- name: Create keys directory
+  file:
+    path: /etc/ssl/acme
+    state: directory
+  register: keys_dir
+
+- name: Generate certificate private key
+  openssl_privatekey:
+    path: "{{ keys_dir.path }}/private.key"
+    size: 4096
+    type: RSA
+
+- name: Generate account private key
+  openssl_privatekey:
+    path: "{{ keys_dir.path }}/letsencrypt.key"
+    size: 4096
+    type: RSA

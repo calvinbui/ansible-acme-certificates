@@ -1,0 +1,4 @@
+---
+acme_certificate_domains:
+
+acme_letsencrypt_account_key:

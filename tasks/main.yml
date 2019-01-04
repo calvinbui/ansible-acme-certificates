@@ -1,0 +1,7 @@
+---
+- include_tasks: keys.yml
+
+- include_tasks: tasks.yml
+  loop: "{{ acme_certificate_domains }}"
+  loop_control:
+    loop_var: domain
