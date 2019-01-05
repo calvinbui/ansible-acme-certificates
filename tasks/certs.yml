@@ -44,7 +44,7 @@
   acme_certificate:
     account_email: "{{ domain.email }}"
     account_key_src: "{{ keys.path }}/letsencrypt.key"
-    acme_directory: https://acme-staging-v02.api.letsencrypt.org/directory
+    acme_directory: https://acme-v02.api.letsencrypt.org/directory
     acme_version: 2
     chain_dest: "{{ keys.path }}/{{ domain.name }}-intermediate.crt"
     dest: "{{ keys.path }}/{{ domain.name }}.crt"
