@@ -28,11 +28,11 @@ from urllib.parse import urlparse
 
 REQUEST_TIMEOUT = 5.0
 
-LOGIN_URL = '%s/cgi/login.cgi'
-IPMI_CERT_INFO_URL = '%s/cgi/ipmi.cgi'
-UPLOAD_CERT_URL = '%s/cgi/upload_ssl.cgi'
-REBOOT_IPMI_URL = '%s/cgi/BMCReset.cgi'
-CONFIG_CERT_URL = '%s/cgi/url_redirect.cgi?url_name=config_ssl'
+LOGIN_URL_TMPL = '%s/cgi/login.cgi'
+IPMI_CERT_INFO_URL_TMPL = '%s/cgi/ipmi.cgi'
+UPLOAD_CERT_URL_TMPL = '%s/cgi/upload_ssl.cgi'
+REBOOT_IPMI_URL_TMPL = '%s/cgi/BMCReset.cgi'
+CONFIG_CERT_URL_TMPL = '%s/cgi/url_redirect.cgi?url_name=config_ssl'
 
 
 def login(session, url, username, password):
@@ -50,7 +50,7 @@ def login(session, url, username, password):
         'pwd': password
     }
 
-    login_url = LOGIN_URL % url
+    login_url = LOGIN_URL_TMPL % url
     try:
         result = session.post(login_url, login_data, timeout=REQUEST_TIMEOUT, verify=False)
     except ConnectionError:
@@ -80,7 +80,7 @@ def get_ipmi_cert_info(session, url):
 
     for cookie in session.cookies:
         print(cookie)
-    ipmi_info_url = IPMI_CERT_INFO_URL % url
+    ipmi_info_url = IPMI_CERT_INFO_URL_TMPL % url
     try:
         result = session.post(ipmi_info_url, cert_info_data, timeout=REQUEST_TIMEOUT, verify=False)
     except ConnectionError:
@@ -123,11 +123,11 @@ def upload_cert(session, url, key_file, cert_file):
     with open(cert_file, 'rb') as filehandle:
         cert_data = filehandle.read()
     files_to_upload = [
-        ('/tmp/cert.key', ('cert.key', key_data, 'application/octet-stream')),
-        ('/tmp/cert.pem', ('cert.pem', cert_data, 'application/x-x509-ca-cert'))
+        ('/tmp/cert.pem', ('cert.pem', key_data, 'application/octet-stream')),
+        ('/tmp/key.pem', ('key.pem', cert_data, 'application/x-x509-ca-cert'))
     ]
 
-    upload_cert_url = UPLOAD_CERT_URL % url
+    upload_cert_url = UPLOAD_CERT_URL_TMPL % url
     try:
         result = session.post(upload_cert_url, files=files_to_upload, timeout=REQUEST_TIMEOUT, verify=False)
     except ConnectionError:
@@ -151,15 +151,15 @@ def reboot_ipmi(session, url):
         'time_stamp': timestamp  # 'Thu Jul 12 2018 19:52:48 GMT+0300 (FLE Daylight Time)'
     }
 
-    upload_cert_url = REBOOT_IPMI_URL % url
+    reboot_url = REBOOT_IPMI_URL_TMPL % url
     try:
-        result = session.post(upload_cert_url, reboot_data, timeout=REQUEST_TIMEOUT, verify=False)
+        result = session.post(reboot_url, reboot_data, timeout=REQUEST_TIMEOUT, verify=False)
     except ConnectionError:
         return False
     if not result.ok:
         return False
 
-    print("Url: %s" % upload_cert_url)
+    print("Url: %s" % reboot_url)
     print(result.headers)
     print(result.text)
     if '<STATE CODE="OK"/>' not in result.text:
