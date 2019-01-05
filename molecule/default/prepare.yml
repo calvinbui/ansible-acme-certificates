@@ -1,0 +1,28 @@
+---
+- name: Prepare
+  hosts: all
+  become: true
+  vars:
+    pip_install_packages:
+      - name: pyopenssl
+        version: '18.0.0'
+      - name: cryptography
+        version: '2.4.2'
+      - name: click
+        version: '7.0'
+      - name: requests
+        version: '2.21.0'
+      - name: lxml
+        version: '4.3.0'
+  pre_tasks:
+    - name: Update apt cache.
+      apt:
+        update_cache: true
+        cache_valid_time: 600
+      changed_when: false
+      register: result
+      until: result is success
+      retries: 5
+      delay: 5
+  roles:
+    - calvinbui.ansible_pip

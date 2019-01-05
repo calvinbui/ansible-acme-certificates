@@ -1,4 +1,15 @@
 ---
 acme_certificate_domains:
+  - name: freenas.example.com
+    tld: example.com
+    email: myemail@gmail.com
+    challenge: dns-01
+    script: freenas.py
+    script_executable: python3
+    script_args: '--url https://freenas.bui.io --no-tls-verify --user root --password password --certfile "{{ keys.path }}/freenas.example.com.pem" --keyfile "{{ keys.path }}/private.key"'
+    script_environment:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
 
-acme_letsencrypt_account_key:
+acme_certificate_cloudflare_email: myemail@gmail.com
+acme_certificate_cloudflare_api_token: verylongkey

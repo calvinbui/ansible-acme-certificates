@@ -1,0 +1,64 @@
+---
+
+- name: Create CSR for {{ domain.name }}
+  openssl_csr:
+    path: "/tmp/{{ domain.name }}"
+    common_name: "{{ domain.name }}"
+    privatekey_path: "{{ keys.path }}/private.key"
+  register: csr_data
+
+- name: Get ACME challenge for {{ domain.name }}
+  acme_certificate:
+    account_email: "{{ domain.email }}"
+    account_key_src: "{{ keys.path }}/letsencrypt.key"
+    acme_directory: https://acme-staging-v02.api.letsencrypt.org/directory
+    acme_version: 2
+    chain_dest: "{{ keys.path }}/{{ domain.name }}-intermediate.crt"
+    dest: "{{ keys.path }}/{{ domain.name }}.crt"
+    challenge: "{{ domain.challenge }}"
+    csr: "{{ csr_data.filename }}"
+    fullchain_dest: "{{ keys.path }}/{{ domain.name }}.pem"
+    remaining_days: 40
+    terms_agreed: yes
+  register: acme_data
+
+- name: Fulfill challenge for {{ domain.name }}
+  cloudflare_dns:
+    domain: "{{ domain.tld }}"
+    record: "{{ item.key }}"
+    type: TXT
+    value: "{{ item.value[0] }}"
+    state: present
+    solo: true
+    account_email: "{{ acme_certificate_cloudflare_email }}"
+    account_api_token: "{{ acme_certificate_cloudflare_api_token }}"
+  with_dict: "{{ acme_data.challenge_data_dns }}"
+  when: acme_data is changed
+
+- name: Wait for {{ domain.name }} DNS replication
+  pause:
+    seconds: 60
+  when: acme_data is changed
+
+- name: Validate DNS and get certs for {{ domain.name }}
+  acme_certificate:
+    account_email: "{{ domain.email }}"
+    account_key_src: "{{ keys.path }}/letsencrypt.key"
+    acme_directory: https://acme-staging-v02.api.letsencrypt.org/directory
+    acme_version: 2
+    chain_dest: "{{ keys.path }}/{{ domain.name }}-intermediate.crt"
+    dest: "{{ keys.path }}/{{ domain.name }}.crt"
+    challenge: "{{ domain.challenge }}"
+    csr: "{{ csr_data.filename }}"
+    fullchain_dest: "{{ keys.path }}/{{ domain.name }}.pem"
+    remaining_days: 40
+    terms_agreed: yes
+    data: "{{ acme_data }}"
+  when: acme_data is changed
+
+- name: Copy and run {{ domain.name }} deploy script
+  script: "{{ domain.script }} {{ domain.script_args | default('') }}"
+  args:
+    executable: "{{ domain.script_executable }}"
+  environment: "{{ domain.script_environment | default(omit) }}"
+  when: acme_data is changed
