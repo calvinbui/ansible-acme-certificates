@@ -8,3 +8,5 @@ UNIFICERTFOLDER=$4
 sudo cp "$FULLCHAIN" "$UNIFICERTFOLDER"/chain.pem
 sudo cp "$CERTFILE" "$UNIFICERTFOLDER"/cert.pem
 sudo cp "$KEYFILE" "$UNIFICERTFOLDER"/privkey.pem
+
+sudo docker restart unifi
