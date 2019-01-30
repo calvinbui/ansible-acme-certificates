@@ -7,7 +7,7 @@ CERTFILE=$2
 KEYFILE=$3
 CACERTFILE=$4
 
-KEYSTORE=/root/.keystore
+KEYSTORE=/usr/sbin/.keystore
 KEYSTORENAME=tomcat
 PKCS12KEYSTORE=/root/pkcs12
 KEYSTOREPASSWORD=changeit
