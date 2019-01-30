@@ -10,20 +10,32 @@ CACERTFILE=$4
 KEYSTORE=/root/.keystore
 KEYSTORENAME=tomcat
 PKCS12KEYSTORE=/root/pkcs12
-KEYSTORE_PASSWORD=changeit
+KEYSTOREPASSWORD=changeit
+DOCKERCERTFILE=/tmp/CERTFILE
+DOCKERKEYFILE=/tmp/KEYFILE
+DOCKERCACERTFILE=/tmp/CACERTFILE
+DOCKERSCRIPT="$DOCKERSCRIPT"
 
-cat > /tmp/confluence-cert.sh << EOT
+docker cp $CERTFILE confluence:"$DOCKERCERTFILE"
+docker cp $KEYFILE confluence:"$DOCKERKEYFILE"
+docker cp $CACERTFILE confluence:"$DOCKERCACERTFILE"
+
+cat > "$DOCKERSCRIPT" << EOT
 #!/usr/bin/env bash
+
+# start clean
+rm $KEYSTORE
+rm $PKCS12KEYSTORE
 
 # Combine the private key and the certificate into a PKCS12 keystore
 openssl pkcs12 -export \
--in $CERTFILE \
--inkey $KEYFILE \
+-in $DOCKERCERTFILE \
+-inkey $DOCKERKEYFILE \
 -out $PKCS12KEYSTORE \
 -name $KEYSTORENAME \
--CAfile $CACERTFILE \
+-CAfile $DOCKERCACERTFILE \
 -caname root \
--password pass:$KEYSTORE_PASSWORD
+-password pass:$KEYSTOREPASSWORD
 
 # Create default keystore
 keytool \
@@ -33,24 +45,25 @@ keytool \
 -keysize 4096 \
 -keystore $KEYSTORE \
 -dname "CN=$SITE" \
--storepass $KEYSTORE_PASSWORD
+-storepass $KEYSTOREPASSWORD \
+-keypass $KEYSTOREPASSWORD
 
 # Merge PKCS12 keystore with default keystore
 keytool \
 -importkeystore \
--deststorepass $KEYSTORE_PASSWORD \
--destkeypass $KEYSTORE_PASSWORD \
+-deststorepass $KEYSTOREPASSWORD \
+-destkeypass $KEYSTOREPASSWORD \
 -destkeystore $KEYSTORE \
 -srckeystore $PKCS12KEYSTORE \
 -srcstoretype PKCS12 \
--srcstorepass $KEYSTORE_PASSWORD \
+-srcstorepass $KEYSTOREPASSWORD \
 -alias $KEYSTORENAME
 
 # Remove PKCS12 keystore after merge
 rm $PKCS12KEYSTORE
 
 # Edit server.xml
-if grep "$KEYSTORE_PASSWORD" /opt/atlassian/confluence/conf/server.xml; then
+if grep "$KEYSTOREPASSWORD" /opt/atlassian/confluence/conf/server.xml; then
   echo "nothing needs to be done"
 else
   # remove comment line before match
@@ -58,9 +71,15 @@ else
   # remove comment line after match
   sed -i '/keystorePass/{n;d}' server.xml
   # replace password
-  sed -i 's/<MY_CERTIFICATE_PASSWORD>/$KEYSTORE_PASSWORD/' server.xml
+  sed -i 's/<MY_CERTIFICATE_PASSWORD>/$KEYSTOREPASSWORD/' server.xml
 fi
+
 EOT
+
+docker cp "$DOCKERSCRIPT" confluence:"$DOCKERSCRIPT"
+
+docker exec -it confluence chmod +x "$DOCKERSCRIPT"
+docker exec -it confluence "$DOCKERSCRIPT"
 
 # restarting confluence to apply changes
 docker restart confluence
