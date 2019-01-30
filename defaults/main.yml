@@ -10,6 +10,7 @@ acme_certificate_domains:
     script_environment:
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
+    force_deploy: false
 
 acme_certificate_cloudflare_email: myemail@gmail.com
 acme_certificate_cloudflare_api_token: verylongkey
