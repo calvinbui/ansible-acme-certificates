@@ -61,4 +61,4 @@
   args:
     executable: "{{ domain.script_executable }}"
   environment: "{{ domain.script_environment | default(omit) }}"
-  when: acme_data is changed
+  when: (acme_data is changed) or (domain.force_deploy is defined and (domain.force_deploy | bool))
