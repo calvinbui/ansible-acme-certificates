@@ -64,7 +64,9 @@ if grep "$KEYSTOREPASSWORD" /opt/atlassian/confluence/conf/server.xml; then
   echo "nothing needs to be done"
 else
   # remove comment line before match
-  tac /opt/atlassian/confluence/conf/server.xml | sed '/<Connector port="8443"/{n;d}' | tac > tmp && mv tmp server.xml
+  tac /opt/atlassian/confluence/conf/server.xml > /tmp/server.xml
+  sed -i '/<Connector port="8443"/{n;d}' /tmp/server.xml
+  tac /tmp/server.xml > /opt/atlassian/confluence/conf/server.xml
   # remove comment line after match
   sed -i '/keystorePass/{n;d}' /opt/atlassian/confluence/conf/server.xml
   # replace password
