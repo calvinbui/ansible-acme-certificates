@@ -23,9 +23,18 @@ docker cp $CACERTFILE confluence:"$DOCKERCACERTFILE"
 cat > "$DOCKERSCRIPT" << EOT
 #!/usr/bin/env bash
 
-# start clean
-rm $KEYSTORE
-rm $PKCS12KEYSTORE
+# Create default keystore if missing
+if [ ! -f $KEYSTORE ]; then
+  keytool \
+  -genkeypair \
+  -alias $KEYSTORENAME \
+  -keyalg RSA \
+  -keysize 4096 \
+  -keystore $KEYSTORE \
+  -dname "CN=$SITE" \
+  -storepass $KEYSTOREPASSWORD \
+  -keypass $KEYSTOREPASSWORD
+fi
 
 # Combine the private key and the certificate into a PKCS12 keystore
 openssl pkcs12 -export \
@@ -37,20 +46,10 @@ openssl pkcs12 -export \
 -caname root \
 -password pass:$KEYSTOREPASSWORD
 
-# Create default keystore
-keytool \
--genkeypair \
--alias $KEYSTORENAME \
--keyalg RSA \
--keysize 4096 \
--keystore $KEYSTORE \
--dname "CN=$SITE" \
--storepass $KEYSTOREPASSWORD \
--keypass $KEYSTOREPASSWORD
-
 # Merge PKCS12 keystore with default keystore
 keytool \
 -importkeystore \
+-noprompt \
 -deststorepass $KEYSTOREPASSWORD \
 -destkeypass $KEYSTOREPASSWORD \
 -destkeystore $KEYSTORE \
@@ -58,9 +57,6 @@ keytool \
 -srcstoretype PKCS12 \
 -srcstorepass $KEYSTOREPASSWORD \
 -alias $KEYSTORENAME
-
-# Remove PKCS12 keystore after merge
-rm $PKCS12KEYSTORE
 
 # Edit server.xml
 if grep "$KEYSTOREPASSWORD" /opt/atlassian/confluence/conf/server.xml; then
@@ -77,7 +73,6 @@ fi
 EOT
 
 docker cp "$DOCKERSCRIPT" confluence:"$DOCKERSCRIPT"
-
 docker exec -it confluence chmod +x "$DOCKERSCRIPT"
 docker exec -it confluence "$DOCKERSCRIPT"
 
