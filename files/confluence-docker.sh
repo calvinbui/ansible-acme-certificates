@@ -16,6 +16,7 @@ DOCKERKEYFILE=/tmp/KEYFILE
 DOCKERCACERTFILE=/tmp/CACERTFILE
 DOCKERSCRIPT=/tmp/confluence-docker.sh
 
+echo "Copying certificates to container"
 docker cp $CERTFILE confluence:"$DOCKERCERTFILE"
 docker cp $KEYFILE confluence:"$DOCKERKEYFILE"
 docker cp $CACERTFILE confluence:"$DOCKERCACERTFILE"
@@ -23,7 +24,7 @@ docker cp $CACERTFILE confluence:"$DOCKERCACERTFILE"
 cat > "$DOCKERSCRIPT" << EOT
 #!/usr/bin/env bash
 
-# Create default keystore if missing
+echo "Create default keystore if missing"
 if [ ! -f $KEYSTORE ]; then
   keytool \
   -genkeypair \
@@ -36,7 +37,7 @@ if [ ! -f $KEYSTORE ]; then
   -keypass $KEYSTOREPASSWORD
 fi
 
-# Combine the private key and the certificate into a PKCS12 keystore
+echo "Combine the private key and the certificate into a PKCS12 keystore"
 openssl pkcs12 -export \
 -in $DOCKERCERTFILE \
 -inkey $DOCKERKEYFILE \
@@ -46,7 +47,7 @@ openssl pkcs12 -export \
 -caname root \
 -password pass:$KEYSTOREPASSWORD
 
-# Merge PKCS12 keystore with default keystore
+echo "Merge PKCS12 keystore with default keystore"
 keytool \
 -importkeystore \
 -noprompt \
@@ -63,18 +64,26 @@ if grep "$KEYSTOREPASSWORD" /opt/atlassian/confluence/conf/server.xml; then
   echo "nothing needs to be done"
 else
   # remove comment line before match
-  tac server.xml | sed '/<Connector port="8443"/{n;d}' | tac > tmp && mv tmp server.xml
+  tac /opt/atlassian/confluence/conf/server.xml | sed '/<Connector port="8443"/{n;d}' | tac > tmp && mv tmp server.xml
   # remove comment line after match
-  sed -i '/keystorePass/{n;d}' server.xml
+  sed -i '/keystorePass/{n;d}' /opt/atlassian/confluence/conf/server.xml
   # replace password
-  sed -i 's/<MY_CERTIFICATE_PASSWORD>/$KEYSTOREPASSWORD/' server.xml
+  sed -i 's/<MY_CERTIFICATE_PASSWORD>/$KEYSTOREPASSWORD/' /opt/atlassian/confluence/conf/server.xml
+  echo "Updated server.xml"
 fi
+
+echo "Finished running scripts"
 
 EOT
 
+echo "Copying script to container"
 docker cp "$DOCKERSCRIPT" confluence:"$DOCKERSCRIPT"
+echo "Giving script execute permissions"
 docker exec -it confluence chmod +x "$DOCKERSCRIPT"
+echo "Running script:"
 docker exec -it confluence "$DOCKERSCRIPT"
 
-# restarting confluence to apply changes
+echo "Restarting confluence to apply changes"
 docker restart confluence
+
+echo "Done"
