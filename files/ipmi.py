@@ -22,17 +22,18 @@
 import os
 import argparse
 import requests
+import logging
 from datetime import datetime
 from lxml import etree
 from urllib.parse import urlparse
 
 REQUEST_TIMEOUT = 5.0
 
-LOGIN_URL_TMPL = '%s/cgi/login.cgi'
-IPMI_CERT_INFO_URL_TMPL = '%s/cgi/ipmi.cgi'
-UPLOAD_CERT_URL_TMPL = '%s/cgi/upload_ssl.cgi'
-REBOOT_IPMI_URL_TMPL = '%s/cgi/BMCReset.cgi'
-CONFIG_CERT_URL_TMPL = '%s/cgi/url_redirect.cgi?url_name=config_ssl'
+LOGIN_URL = '%s/cgi/login.cgi'
+IPMI_CERT_INFO_URL = '%s/cgi/ipmi.cgi'
+UPLOAD_CERT_URL = '%s/cgi/upload_ssl.cgi'
+REBOOT_IPMI_URL = '%s/cgi/BMCReset.cgi'
+CONFIG_CERT_URL = '%s/cgi/url_redirect.cgi?url_name=config_ssl'
 
 
 def login(session, url, username, password):
@@ -50,7 +51,7 @@ def login(session, url, username, password):
         'pwd': password
     }
 
-    login_url = LOGIN_URL_TMPL % url
+    login_url = LOGIN_URL % url
     try:
         result = session.post(login_url, login_data, timeout=REQUEST_TIMEOUT, verify=False)
     except ConnectionError:
@@ -78,9 +79,9 @@ def get_ipmi_cert_info(session, url):
         'time_stamp': timestamp  # 'Thu Jul 12 2018 19:52:48 GMT+0300 (FLE Daylight Time)'
     }
 
-    for cookie in session.cookies:
-        print(cookie)
-    ipmi_info_url = IPMI_CERT_INFO_URL_TMPL % url
+    #for cookie in session.cookies:
+    #    print(cookie)
+    ipmi_info_url = IPMI_CERT_INFO_URL % url
     try:
         result = session.post(ipmi_info_url, cert_info_data, timeout=REQUEST_TIMEOUT, verify=False)
     except ConnectionError:
@@ -107,6 +108,40 @@ def get_ipmi_cert_info(session, url):
         'valid_until': valid_until
     }
 
+def get_ipmi_cert_valid(session, url):
+    """
+    Verify existing certificate information
+    :param session: Current session object
+    :type session requests.session
+    :param url: base-URL to IPMI
+    :return: bool
+    """
+    timestamp = datetime.utcnow().strftime('%a %d %b %Y %H:%M:%S GMT')
+
+    cert_info_data = {
+        'SSL_VALIDATE.XML': '(0,0)',
+        'time_stamp': timestamp  # 'Thu Jul 12 2018 19:52:48 GMT+0300 (FLE Daylight Time)'
+    }
+
+    #for cookie in session.cookies:
+    #    print(cookie)
+    ipmi_info_url = IPMI_CERT_INFO_URL % url
+    try:
+        result = session.post(ipmi_info_url, cert_info_data, timeout=REQUEST_TIMEOUT, verify=False)
+    except ConnectionError:
+        return False
+    if not result.ok:
+        return False
+
+    root = etree.fromstring(result.text)
+    # <?xml> <IPMI> <SSL_INFO>
+    status = root.xpath('//IPMI/SSL_INFO')
+    if not status:
+        return False
+    # Since xpath will return a list, just pick the first one from it.
+    status = status[0]
+    valid_cert = int(status.get('VALIDATE'))
+    return bool(valid_cert)
 
 def upload_cert(session, url, key_file, cert_file):
     """
@@ -123,11 +158,11 @@ def upload_cert(session, url, key_file, cert_file):
     with open(cert_file, 'rb') as filehandle:
         cert_data = filehandle.read()
     files_to_upload = [
-        ('/tmp/cert.pem', ('cert.pem', key_data, 'application/octet-stream')),
-        ('/tmp/key.pem', ('key.pem', cert_data, 'application/x-x509-ca-cert'))
+        ('/tmp/cert.pem', ('cert.pem', cert_data, 'application/octet-stream')),
+        ('/tmp/key.pem', ('key.pem', key_data, 'application/octet-stream'))
     ]
 
-    upload_cert_url = UPLOAD_CERT_URL_TMPL % url
+    upload_cert_url = UPLOAD_CERT_URL % url
     try:
         result = session.post(upload_cert_url, files=files_to_upload, timeout=REQUEST_TIMEOUT, verify=False)
     except ConnectionError:
@@ -140,7 +175,6 @@ def upload_cert(session, url, key_file, cert_file):
         return False
     if 'CONFPAGE_RESET' not in result.text:
         return False
-
     return True
 
 
@@ -151,17 +185,17 @@ def reboot_ipmi(session, url):
         'time_stamp': timestamp  # 'Thu Jul 12 2018 19:52:48 GMT+0300 (FLE Daylight Time)'
     }
 
-    reboot_url = REBOOT_IPMI_URL_TMPL % url
+    upload_cert_url = REBOOT_IPMI_URL % url
     try:
-        result = session.post(reboot_url, reboot_data, timeout=REQUEST_TIMEOUT, verify=False)
+        result = session.post(upload_cert_url, reboot_data, timeout=REQUEST_TIMEOUT, verify=False)
     except ConnectionError:
         return False
     if not result.ok:
         return False
 
-    print("Url: %s" % reboot_url)
-    print(result.headers)
-    print(result.text)
+    #print("Url: %s" % upload_cert_url)
+    #print(result.headers)
+    #print(result.text)
     if '<STATE CODE="OK"/>' not in result.text:
         return False
 
@@ -180,8 +214,10 @@ def main():
                         help='IPMI username with admin access')
     parser.add_argument('--password', required=True,
                         help='IPMI user password')
-    parser.add_argument('--no-reboot',
+    parser.add_argument('--no-reboot', action='store_true',
                         help='The default is to reboot the IPMI after upload for the change to take effect.')
+    parser.add_argument('--quiet', action='store_true',
+                        help='Do not output anything if successful')
     args = parser.parse_args()
 
     # Confirm args
@@ -193,6 +229,14 @@ def main():
         exit(2)
     if args.ipmi_url[-1] == '/':
         args.ipmi_url = args.ipmi_url[0:-1]
+
+    if not args.quiet:
+        # Enable reuest logging
+        logging.basicConfig()
+        logging.getLogger().setLevel(logging.DEBUG)
+        requests_log = logging.getLogger("requests.packages.urllib3")
+        requests_log.setLevel(logging.DEBUG)
+        requests_log.propagate = True
 
     # Start the operation
     requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
@@ -218,7 +262,7 @@ def main():
     if not cert_info:
         print("Failed to extract certificate information from IPMI!")
         exit(2)
-    if cert_info['has_cert']:
+    if not args.quiet and cert_info['has_cert']:
         print("There exists a certificate, which is valid until: %s" % cert_info['valid_until'])
 
     # Go upload!
@@ -226,21 +270,29 @@ def main():
         print("Failed to upload X.509 files to IPMI!")
         exit(2)
 
-    print("Uploaded files ok.")
+    cert_valid = get_ipmi_cert_valid(session, args.ipmi_url)
+    if not cert_valid:
+        print("Uploads failed validation")
+        exit(2)
+
+    if not args.quiet:
+        print("Uploaded files ok.")
 
     cert_info = get_ipmi_cert_info(session, args.ipmi_url)
     if not cert_info:
         print("Failed to extract certificate information from IPMI!")
         exit(2)
-    if cert_info['has_cert']:
+    if not args.quiet and cert_info['has_cert']:
         print("After upload, there exists a certificate, which is valid until: %s" % cert_info['valid_until'])
 
     if not args.no_reboot:
-        print("Rebooting IPMI to apply changes.")
+        if not args.quiet:
+            print("Rebooting IPMI to apply changes.")
         if not reboot_ipmi(session, args.ipmi_url):
             print("Rebooting failed! Go reboot it manually?")
 
-    print("All done!")
+    if not args.quiet:
+        print("All done!")
 
 
 if __name__ == "__main__":
